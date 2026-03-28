@@ -536,13 +536,13 @@
       <div class="scanner-overlay"><div class="scan-frame"></div></div>
     </div>
     <div class="scanner-controls">
-      <button class="btn-scan" id="scanBtn" onclick="toggleScanner()">
+      <button class="btn-scan" id="scanBtn">
         <span id="scanBtnIcon">📷</span>
         <span id="scanBtnText">Start Camera Scanner</span>
       </button>
       <div class="manual-row">
         <input type="text" id="barcodeInput" placeholder="Or type barcode manually…" inputmode="numeric" />
-        <button class="btn-lookup" onclick="lookupBarcode()">Look Up</button>
+        <button class="btn-lookup" id="lookupBtn">Look Up</button>
       </div>
       <div class="status-bar" id="statusBar"></div>
     </div>
@@ -590,8 +590,8 @@
       <textarea id="productNotes" placeholder="Any notes (size, color, where stored…)"></textarea>
     </div>
     <div class="form-actions">
-      <button class="btn-add" onclick="addItem()">✓ Add to Inventory</button>
-      <button class="btn-cancel" onclick="cancelForm()">Cancel</button>
+      <button class="btn-add" id="addBtn">✓ Add to Inventory</button>
+      <button class="btn-cancel" id="cancelBtn">Cancel</button>
     </div>
   </div>
 
@@ -604,15 +604,15 @@
   </div>
 
   <div class="filter-row">
-    <div class="filter-chip active" onclick="setFilter('All',this)">All</div>
-    <div class="filter-chip" onclick="setFilter('Feeding',this)">Feeding</div>
-    <div class="filter-chip" onclick="setFilter('Sleep',this)">Sleep</div>
-    <div class="filter-chip" onclick="setFilter('Clothing',this)">Clothing</div>
-    <div class="filter-chip" onclick="setFilter('Bath & Care',this)">Bath & Care</div>
-    <div class="filter-chip" onclick="setFilter('Diapering',this)">Diapering</div>
-    <div class="filter-chip" onclick="setFilter('Gear & Travel',this)">Gear & Travel</div>
-    <div class="filter-chip" onclick="setFilter('Toys & Play',this)">Toys & Play</div>
-    <div class="filter-chip" onclick="setFilter('Other',this)">Other</div>
+    <div class="filter-chip active" data-cat="All">All</div>
+    <div class="filter-chip" data-cat="Feeding">Feeding</div>
+    <div class="filter-chip" data-cat="Sleep">Sleep</div>
+    <div class="filter-chip" data-cat="Clothing">Clothing</div>
+    <div class="filter-chip" data-cat="Bath & Care">Bath & Care</div>
+    <div class="filter-chip" data-cat="Diapering">Diapering</div>
+    <div class="filter-chip" data-cat="Gear & Travel">Gear & Travel</div>
+    <div class="filter-chip" data-cat="Toys & Play">Toys & Play</div>
+    <div class="filter-chip" data-cat="Other">Other</div>
   </div>
 
   <div id="inventoryList"></div>
@@ -646,9 +646,7 @@ function setStatus(msg, type = '') {
 }
 
 // ── SCANNER ──────────────────────────────────────────
-window.toggleScanner = function() {
-  scannerRunning ? stopScanner() : startScanner();
-};
+window.toggleScanner = function() { scannerRunning ? stopScanner() : startScanner(); }; // kept for safety
 
 async function startScanner() {
   const viewport = document.getElementById('scanner-viewport');
@@ -660,22 +658,40 @@ async function startScanner() {
   setStatus('Point camera at barcode…', 'loading');
 
   try {
-    codeReader = new BrowserMultiFormatReader();
-    const devices = await BrowserMultiFormatReader.listVideoInputDevices();
-    // Prefer rear camera
-    const device = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
-    const deviceId = device ? device.deviceId : undefined;
-
-    scannerRunning = true;
-    await codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
-      if (result) {
-        const code = result.getText();
-        stopScanner();
-        document.getElementById('barcodeInput').value = code;
-        lookupBarcodeValue(code);
-      }
-      // NotFoundException is normal while scanning — ignore it
+    // Get rear camera stream directly via getUserMedia
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
     });
+    video.srcObject = stream;
+    await video.play();
+
+    codeReader = new BrowserMultiFormatReader();
+    scannerRunning = true;
+
+    // Poll frames for barcode
+    const canvas = document.createElement('canvas');
+    const ctx = canvas.getContext('2d');
+
+    async function scanFrame() {
+      if (!scannerRunning) return;
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width  = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+        try {
+          const result = codeReader.decodeFromCanvas(canvas);
+          if (result) {
+            const code = result.getText();
+            stopScanner();
+            document.getElementById('barcodeInput').value = code;
+            lookupBarcodeValue(code);
+            return;
+          }
+        } catch(e) { /* NotFoundException is normal, keep scanning */ }
+      }
+      requestAnimationFrame(scanFrame);
+    }
+    scanFrame();
   } catch (err) {
     setStatus('Camera error: ' + err.message, 'error');
     stopScanner();
@@ -683,8 +699,10 @@ async function startScanner() {
 }
 
 function stopScanner() {
-  if (codeReader) { codeReader.reset(); codeReader = null; }
   scannerRunning = false;
+  if (codeReader) { try { codeReader.reset(); } catch(e) {} codeReader = null; }
+  const vid = document.getElementById('scanner-video');
+  if (vid.srcObject) { vid.srcObject.getTracks().forEach(t => t.stop()); vid.srcObject = null; }
   document.getElementById('scanner-viewport').style.display = 'none';
   document.getElementById('scanBtn').classList.remove('scanning');
   document.getElementById('scanBtnIcon').textContent = '📷';
@@ -744,7 +762,7 @@ function populateForm(name, imgUrl, barcode) {
   document.getElementById('productName').focus();
 }
 
-window.cancelForm = function() {
+function cancelForm() {
   document.getElementById('productForm').classList.remove('visible');
   document.getElementById('barcodeInput').value = '';
   setStatus('');
@@ -753,7 +771,7 @@ window.cancelForm = function() {
 };
 
 // ── ADD ITEM ──────────────────────────────────────────
-window.addItem = function() {
+function addItem() {
   const name = document.getElementById('productName').value.trim();
   if (!name) { showToast('Please enter a product name.'); return; }
   const item = {
@@ -773,14 +791,14 @@ window.addItem = function() {
   showToast('✓ Added to inventory!');
 };
 
-window.deleteItem = function(id) {
+function deleteItem(id) {
   inventory = inventory.filter(i => i.id !== id);
   saveInventory();
   renderList();
   showToast('Item removed.');
 };
 
-window.setFilter = function(cat, el) {
+function setFilter(cat, el) {
   currentFilter = cat;
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
@@ -814,7 +832,7 @@ function renderList() {
         ${item.notes   ? `<div class="item-notes">${esc(item.notes)}</div>`   : ''}
       </div>
       <div class="item-actions">
-        <button class="btn-icon" onclick="deleteItem(${item.id})">🗑</button>
+        <button class="btn-icon" data-delete="${item.id}">🗑</button>
       </div>
     </div>`).join('');
 }
@@ -827,7 +845,7 @@ function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-window.exportCSV = function() {
+function exportCSV() {
   if (inventory.length === 0) { showToast('Nothing to export yet!'); return; }
   const headers = ['Name','Category','Condition','Notes','Barcode','Date Added'];
   const rows = inventory.map(i =>
@@ -843,9 +861,38 @@ window.exportCSV = function() {
   showToast('CSV downloaded!');
 };
 
-document.getElementById('barcodeInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') window.lookupBarcode();
+// ── EVENT LISTENERS ───────────────────────────────────
+document.getElementById('scanBtn').addEventListener('click', () => {
+  scannerRunning ? stopScanner() : startScanner();
 });
+document.getElementById('lookupBtn').addEventListener('click', lookupBarcode);
+document.getElementById('addBtn').addEventListener('click', addItem);
+document.getElementById('cancelBtn').addEventListener('click', cancelForm);
+document.getElementById('barcodeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') lookupBarcode();
+});
+document.querySelectorAll('.filter-chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    currentFilter = chip.dataset.cat;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    chip.classList.add('active');
+    renderList();
+  });
+});
+
+// delete buttons use event delegation since they're dynamically rendered
+document.getElementById('inventoryList').addEventListener('click', e => {
+  const btn = e.target.closest('[data-delete]');
+  if (btn) {
+    inventory = inventory.filter(i => i.id !== Number(btn.dataset.delete));
+    saveInventory();
+    renderList();
+    showToast('Item removed.');
+  }
+});
+
+window.exportCSV = exportCSV; // keep for export button
+document.querySelector('.btn-export').addEventListener('click', exportCSV);
 
 renderList();
 </script>
