@@ -4,7 +4,10 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Baby Inventory</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/quagga/0.12.1/quagga.min.js"></script>
+<script type="module">
+  import { BrowserMultiFormatReader, NotFoundException } from 'https://esm.sh/@zxing/library@0.20.0';
+  window.ZXingReader = new BrowserMultiFormatReader();
+</script>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:wght@400;600;700&family=DM+Sans:wght@300;400;500&display=swap');
 
@@ -20,7 +23,6 @@
     --text-muted: #8a7a6a;
     --border: #e4d8cc;
     --shadow: 0 2px 12px rgba(44,36,22,0.08);
-    --shadow-lg: 0 8px 32px rgba(44,36,22,0.14);
   }
 
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -60,7 +62,6 @@
 
   .main { max-width: 520px; margin: 0 auto; padding: 20px 16px 0; }
 
-  /* SCANNER CARD */
   .scanner-card {
     background: var(--warm-white);
     border: 1px solid var(--border);
@@ -96,23 +97,16 @@
   #scanner-viewport {
     position: relative;
     width: 100%;
-    height: 0;
-    padding-bottom: 62%;
     background: #1a1a1a;
-    overflow: hidden;
     display: none;
   }
 
-  #scanner-viewport video,
-  #scanner-viewport canvas {
-    position: absolute;
-    top: 0; left: 0;
-    width: 100% !important;
-    height: 100% !important;
+  #scanner-video {
+    width: 100%;
+    height: 260px;
     object-fit: cover;
+    display: block;
   }
-
-  #scanner-viewport canvas { opacity: 0; }
 
   .scanner-overlay {
     position: absolute;
@@ -125,27 +119,28 @@
   }
 
   .scan-frame {
-    width: 220px; height: 110px;
+    width: 240px; height: 120px;
     border: 2px solid var(--blush);
     border-radius: 10px;
-    box-shadow: 0 0 0 2000px rgba(0,0,0,0.35);
+    box-shadow: 0 0 0 2000px rgba(0,0,0,0.4);
     position: relative;
+    overflow: hidden;
   }
 
-  .scan-frame::before {
+  .scan-frame::after {
     content: '';
     position: absolute;
-    top: 50%; left: 0; right: 0;
+    left: 0; right: 0;
     height: 2px;
     background: linear-gradient(90deg, transparent, var(--blush), transparent);
     animation: scanline 1.8s ease-in-out infinite;
   }
 
   @keyframes scanline {
-    0%, 100% { top: 15%; opacity: 0; }
-    10% { opacity: 1; }
-    90% { opacity: 1; }
-    50% { top: 85%; }
+    0%   { top: 10%; opacity: 0; }
+    10%  { opacity: 1; }
+    90%  { opacity: 1; }
+    100% { top: 90%; opacity: 0; }
   }
 
   .scanner-controls { padding: 14px 20px 18px; display: flex; flex-direction: column; gap: 10px; }
@@ -173,10 +168,7 @@
   .btn-scan.scanning { background: var(--blush); }
   .btn-scan.scanning:hover { background: #d4927a; }
 
-  .manual-row {
-    display: flex;
-    gap: 8px;
-  }
+  .manual-row { display: flex; gap: 8px; }
 
   .manual-row input {
     flex: 1;
@@ -209,7 +201,6 @@
 
   .btn-lookup:hover { background: #d4927a; }
 
-  /* PRODUCT FORM */
   .product-form {
     background: var(--warm-white);
     border: 1.5px solid var(--sage-light);
@@ -223,7 +214,7 @@
 
   @keyframes slideIn {
     from { opacity: 0; transform: translateY(-8px); }
-    to { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   .product-form.visible { display: block; }
@@ -251,9 +242,7 @@
     flex-shrink: 0;
   }
 
-  .product-name-field {
-    flex: 1;
-  }
+  .product-name-field { flex: 1; }
 
   .product-name-field label {
     font-size: 0.72rem;
@@ -295,7 +284,6 @@
   }
 
   .form-group select,
-  .form-group input,
   .form-group textarea {
     width: 100%;
     padding: 9px 11px;
@@ -311,7 +299,6 @@
   }
 
   .form-group select:focus,
-  .form-group input:focus,
   .form-group textarea:focus { border-color: var(--sage); }
 
   .form-group textarea { resize: none; height: 60px; }
@@ -343,12 +330,8 @@
     font-family: 'DM Sans', sans-serif;
     font-size: 0.92rem;
     cursor: pointer;
-    transition: border-color 0.18s;
   }
 
-  .btn-cancel:hover { border-color: var(--text-muted); }
-
-  /* INVENTORY LIST */
   .list-header {
     display: flex;
     align-items: center;
@@ -360,7 +343,6 @@
     font-family: 'Fraunces', serif;
     font-size: 1.1rem;
     font-weight: 600;
-    color: var(--text);
   }
 
   .item-count {
@@ -437,13 +419,12 @@
     gap: 12px;
     align-items: flex-start;
     box-shadow: var(--shadow);
-    transition: transform 0.15s;
     animation: fadeUp 0.22s ease;
   }
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(6px); }
-    to { opacity: 1; transform: translateY(0); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   .item-img {
@@ -484,28 +465,13 @@
     border-radius: 10px;
   }
 
-  .tag-cat { background: var(--blush-light); color: #7a4a38; }
-  .tag-cond { background: var(--sage-light); color: var(--sage-dark); }
+  .tag-cat  { background: var(--blush-light); color: #7a4a38; }
+  .tag-cond { background: var(--sage-light);  color: var(--sage-dark); }
 
-  .item-barcode {
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    font-family: monospace;
-  }
+  .item-barcode { font-size: 0.7rem; color: var(--text-muted); font-family: monospace; }
+  .item-notes   { font-size: 0.78rem; color: var(--text-muted); margin-top: 3px; font-style: italic; }
 
-  .item-notes {
-    font-size: 0.78rem;
-    color: var(--text-muted);
-    margin-top: 3px;
-    font-style: italic;
-  }
-
-  .item-actions {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    flex-shrink: 0;
-  }
+  .item-actions { display: flex; flex-direction: column; gap: 6px; flex-shrink: 0; }
 
   .btn-icon {
     width: 30px; height: 30px;
@@ -521,10 +487,10 @@
 
   .btn-icon:hover { background: #fde8e0; color: #c0392b; border-color: #fde8e0; }
 
-  /* TOAST */
   .toast {
     position: fixed;
-    bottom: 24px; left: 50%; transform: translateX(-50%) translateY(80px);
+    bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(80px);
     background: var(--text);
     color: var(--cream);
     padding: 11px 20px;
@@ -538,7 +504,6 @@
 
   .toast.show { transform: translateX(-50%) translateY(0); }
 
-  /* STATUS */
   .status-bar {
     font-size: 0.78rem;
     color: var(--text-muted);
@@ -548,7 +513,7 @@
   }
 
   .status-bar.loading { color: var(--sage); }
-  .status-bar.error { color: #c0392b; }
+  .status-bar.error   { color: #c0392b; }
   .status-bar.success { color: var(--sage-dark); }
 </style>
 </head>
@@ -561,13 +526,13 @@
 
 <div class="main">
 
-  <!-- SCANNER CARD -->
   <div class="scanner-card">
     <div class="scanner-header">
       <div class="scanner-icon">📷</div>
       <h2>Scan a Barcode</h2>
     </div>
     <div id="scanner-viewport">
+      <video id="scanner-video" autoplay muted playsinline></video>
       <div class="scanner-overlay"><div class="scan-frame"></div></div>
     </div>
     <div class="scanner-controls">
@@ -583,7 +548,6 @@
     </div>
   </div>
 
-  <!-- PRODUCT FORM -->
   <div class="product-form" id="productForm">
     <div class="product-info-row">
       <div id="productThumbWrap" class="product-thumb-placeholder">🛍️</div>
@@ -631,7 +595,6 @@
     </div>
   </div>
 
-  <!-- INVENTORY LIST -->
   <div class="list-header">
     <div style="display:flex;align-items:center;gap:8px">
       <h2>Inventory</h2>
@@ -640,40 +603,40 @@
     <button class="btn-export" onclick="exportCSV()">⬇ Export CSV</button>
   </div>
 
-  <div class="filter-row" id="filterRow">
-    <div class="filter-chip active" data-filter="All" onclick="setFilter('All',this)">All</div>
-    <div class="filter-chip" data-filter="Feeding" onclick="setFilter('Feeding',this)">Feeding</div>
-    <div class="filter-chip" data-filter="Sleep" onclick="setFilter('Sleep',this)">Sleep</div>
-    <div class="filter-chip" data-filter="Clothing" onclick="setFilter('Clothing',this)">Clothing</div>
-    <div class="filter-chip" data-filter="Bath & Care" onclick="setFilter('Bath &amp; Care',this)">Bath & Care</div>
-    <div class="filter-chip" data-filter="Diapering" onclick="setFilter('Diapering',this)">Diapering</div>
-    <div class="filter-chip" data-filter="Gear & Travel" onclick="setFilter('Gear &amp; Travel',this)">Gear & Travel</div>
-    <div class="filter-chip" data-filter="Toys & Play" onclick="setFilter('Toys &amp; Play',this)">Toys & Play</div>
-    <div class="filter-chip" data-filter="Other" onclick="setFilter('Other',this)">Other</div>
+  <div class="filter-row">
+    <div class="filter-chip active" onclick="setFilter('All',this)">All</div>
+    <div class="filter-chip" onclick="setFilter('Feeding',this)">Feeding</div>
+    <div class="filter-chip" onclick="setFilter('Sleep',this)">Sleep</div>
+    <div class="filter-chip" onclick="setFilter('Clothing',this)">Clothing</div>
+    <div class="filter-chip" onclick="setFilter('Bath & Care',this)">Bath & Care</div>
+    <div class="filter-chip" onclick="setFilter('Diapering',this)">Diapering</div>
+    <div class="filter-chip" onclick="setFilter('Gear & Travel',this)">Gear & Travel</div>
+    <div class="filter-chip" onclick="setFilter('Toys & Play',this)">Toys & Play</div>
+    <div class="filter-chip" onclick="setFilter('Other',this)">Other</div>
   </div>
 
   <div id="inventoryList"></div>
-
 </div>
 
 <div class="toast" id="toast"></div>
 
-<script>
+<script type="module">
+import { BrowserMultiFormatReader, NotFoundException } from 'https://esm.sh/@zxing/library@0.20.0';
+
 let inventory = JSON.parse(localStorage.getItem('babyInventory') || '[]');
 let currentFilter = 'All';
 let scannerRunning = false;
 let currentBarcode = '';
 let currentImageUrl = '';
+let codeReader = null;
 
-function saveInventory() {
-  localStorage.setItem('babyInventory', JSON.stringify(inventory));
-}
+function saveInventory() { localStorage.setItem('babyInventory', JSON.stringify(inventory)); }
 
-function showToast(msg, duration = 2200) {
+function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), duration);
+  setTimeout(() => t.classList.remove('show'), 2200);
 }
 
 function setStatus(msg, type = '') {
@@ -683,58 +646,45 @@ function setStatus(msg, type = '') {
 }
 
 // ── SCANNER ──────────────────────────────────────────
-function toggleScanner() {
-  if (scannerRunning) {
-    stopScanner();
-  } else {
-    startScanner();
-  }
-}
+window.toggleScanner = function() {
+  scannerRunning ? stopScanner() : startScanner();
+};
 
-function startScanner() {
+async function startScanner() {
   const viewport = document.getElementById('scanner-viewport');
+  const video    = document.getElementById('scanner-video');
   viewport.style.display = 'block';
   document.getElementById('scanBtn').classList.add('scanning');
   document.getElementById('scanBtnIcon').textContent = '⏹';
   document.getElementById('scanBtnText').textContent = 'Stop Scanner';
   setStatus('Point camera at barcode…', 'loading');
 
-  Quagga.init({
-    inputStream: {
-      type: 'LiveStream',
-      target: viewport,
-      constraints: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }
-    },
-    decoder: {
-      readers: ['upc_a_reader', 'upc_e_reader', 'ean_reader', 'ean_8_reader', 'code_128_reader', 'code_39_reader']
-    },
-    locate: true,
-    frequency: 5
-  }, err => {
-    if (err) {
-      setStatus('Camera error: ' + err.message, 'error');
-      stopScanner();
-      return;
-    }
-    Quagga.start();
-    scannerRunning = true;
-  });
+  try {
+    codeReader = new BrowserMultiFormatReader();
+    const devices = await BrowserMultiFormatReader.listVideoInputDevices();
+    // Prefer rear camera
+    const device = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+    const deviceId = device ? device.deviceId : undefined;
 
-  Quagga.onDetected(result => {
-    const code = result.codeResult.code;
-    if (code) {
-      stopScanner();
-      document.getElementById('barcodeInput').value = code;
-      lookupBarcodeValue(code);
-    }
-  });
+    scannerRunning = true;
+    await codeReader.decodeFromVideoDevice(deviceId, video, (result, err) => {
+      if (result) {
+        const code = result.getText();
+        stopScanner();
+        document.getElementById('barcodeInput').value = code;
+        lookupBarcodeValue(code);
+      }
+      // NotFoundException is normal while scanning — ignore it
+    });
+  } catch (err) {
+    setStatus('Camera error: ' + err.message, 'error');
+    stopScanner();
+  }
 }
 
 function stopScanner() {
-  if (scannerRunning) {
-    Quagga.stop();
-    scannerRunning = false;
-  }
+  if (codeReader) { codeReader.reset(); codeReader = null; }
+  scannerRunning = false;
   document.getElementById('scanner-viewport').style.display = 'none';
   document.getElementById('scanBtn').classList.remove('scanning');
   document.getElementById('scanBtnIcon').textContent = '📷';
@@ -742,52 +692,39 @@ function stopScanner() {
 }
 
 // ── BARCODE LOOKUP ────────────────────────────────────
-function lookupBarcode() {
+window.lookupBarcode = function() {
   const val = document.getElementById('barcodeInput').value.trim();
   if (!val) { setStatus('Enter a barcode first.', 'error'); return; }
   lookupBarcodeValue(val);
-}
+};
 
 async function lookupBarcodeValue(barcode) {
   setStatus('Looking up product…', 'loading');
   currentBarcode = barcode;
   currentImageUrl = '';
 
-  // Try Open Food Facts first (great for baby food/formula), then Open Product Data
   try {
-    const url = `https://world.openfoodfacts.org/api/v0/product/${barcode}.json`;
-    const r = await fetch(url);
+    const r = await fetch(`https://world.openfoodfacts.org/api/v0/product/${barcode}.json`);
     const data = await r.json();
     if (data.status === 1 && data.product) {
       const p = data.product;
       const name = p.product_name || p.generic_name || '';
-      const img = p.image_front_small_url || p.image_url || '';
-      if (name) {
-        populateForm(name, img, barcode);
-        setStatus('Product found!', 'success');
-        return;
-      }
+      const img  = p.image_front_small_url || p.image_url || '';
+      if (name) { populateForm(name, img, barcode); setStatus('Product found!', 'success'); return; }
     }
-  } catch (e) {}
+  } catch(e) {}
 
-  // Try Open Product Data (UPC)
   try {
-    const url2 = `https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`;
-    const r2 = await fetch(url2);
+    const r2 = await fetch(`https://api.upcitemdb.com/prod/trial/lookup?upc=${barcode}`);
     const d2 = await r2.json();
     if (d2.items && d2.items.length > 0) {
       const item = d2.items[0];
       const name = item.title || '';
-      const img = (item.images && item.images[0]) || '';
-      if (name) {
-        populateForm(name, img, barcode);
-        setStatus('Product found!', 'success');
-        return;
-      }
+      const img  = (item.images && item.images[0]) || '';
+      if (name) { populateForm(name, img, barcode); setStatus('Product found!', 'success'); return; }
     }
-  } catch (e) {}
+  } catch(e) {}
 
-  // Not found — still show form
   populateForm('', '', barcode);
   setStatus('Product not found — fill in details below.', 'error');
 }
@@ -807,66 +744,58 @@ function populateForm(name, imgUrl, barcode) {
   document.getElementById('productName').focus();
 }
 
-function cancelForm() {
+window.cancelForm = function() {
   document.getElementById('productForm').classList.remove('visible');
   document.getElementById('barcodeInput').value = '';
   setStatus('');
   currentBarcode = '';
   currentImageUrl = '';
-}
+};
 
 // ── ADD ITEM ──────────────────────────────────────────
-function addItem() {
+window.addItem = function() {
   const name = document.getElementById('productName').value.trim();
   if (!name) { showToast('Please enter a product name.'); return; }
-
   const item = {
     id: Date.now(),
     barcode: currentBarcode,
     name,
-    category: document.getElementById('productCategory').value || 'Other',
+    category:  document.getElementById('productCategory').value || 'Other',
     condition: document.getElementById('productCondition').value,
-    notes: document.getElementById('productNotes').value.trim(),
-    image: currentImageUrl,
-    addedAt: new Date().toLocaleDateString()
+    notes:     document.getElementById('productNotes').value.trim(),
+    image:     currentImageUrl,
+    addedAt:   new Date().toLocaleDateString()
   };
-
   inventory.unshift(item);
   saveInventory();
   renderList();
-  cancelForm();
+  window.cancelForm();
   showToast('✓ Added to inventory!');
-  document.getElementById('barcodeInput').value = '';
-}
+};
 
-// ── DELETE ITEM ───────────────────────────────────────
-function deleteItem(id) {
+window.deleteItem = function(id) {
   inventory = inventory.filter(i => i.id !== id);
   saveInventory();
   renderList();
   showToast('Item removed.');
-}
+};
 
-// ── FILTER ────────────────────────────────────────────
-function setFilter(cat, el) {
+window.setFilter = function(cat, el) {
   currentFilter = cat;
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
   el.classList.add('active');
   renderList();
-}
+};
 
-// ── RENDER LIST ───────────────────────────────────────
 function renderList() {
-  const list = document.getElementById('inventoryList');
+  const list     = document.getElementById('inventoryList');
   const filtered = currentFilter === 'All' ? inventory : inventory.filter(i => i.category === currentFilter);
-
   document.getElementById('itemCount').textContent = inventory.length + ' item' + (inventory.length !== 1 ? 's' : '');
 
   if (filtered.length === 0) {
-    list.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">🧸</div>
-      <p>${inventory.length === 0 ? 'No items yet.<br>Scan a barcode to get started!' : 'No items in this category.'}</p>
-    </div>`;
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">🧸</div><p>${
+      inventory.length === 0 ? 'No items yet.<br>Scan a barcode to get started!' : 'No items in this category.'
+    }</p></div>`;
     return;
   }
 
@@ -874,50 +803,48 @@ function renderList() {
     <div class="item-card">
       ${item.image
         ? `<img src="${item.image}" class="item-img" onerror="this.style.display='none'" />`
-        : `<div class="item-img-placeholder">${categoryEmoji(item.category)}</div>`
-      }
+        : `<div class="item-img-placeholder">${categoryEmoji(item.category)}</div>`}
       <div class="item-body">
-        <div class="item-name">${escHtml(item.name)}</div>
+        <div class="item-name">${esc(item.name)}</div>
         <div class="item-meta">
-          <span class="tag tag-cat">${escHtml(item.category)}</span>
-          ${item.condition ? `<span class="tag tag-cond">${escHtml(item.condition)}</span>` : ''}
+          <span class="tag tag-cat">${esc(item.category)}</span>
+          ${item.condition ? `<span class="tag tag-cond">${esc(item.condition)}</span>` : ''}
         </div>
-        ${item.barcode ? `<div class="item-barcode">${escHtml(item.barcode)}</div>` : ''}
-        ${item.notes ? `<div class="item-notes">${escHtml(item.notes)}</div>` : ''}
+        ${item.barcode ? `<div class="item-barcode">${esc(item.barcode)}</div>` : ''}
+        ${item.notes   ? `<div class="item-notes">${esc(item.notes)}</div>`   : ''}
       </div>
       <div class="item-actions">
-        <button class="btn-icon" onclick="deleteItem(${item.id})" title="Remove">🗑</button>
+        <button class="btn-icon" onclick="deleteItem(${item.id})">🗑</button>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
 function categoryEmoji(cat) {
-  const map = { 'Feeding':'🍼','Sleep':'🛏️','Clothing':'👕','Bath & Care':'🛁','Diapering':'🧷','Gear & Travel':'🚗','Toys & Play':'🧸','Safety':'🔒','Health':'💊','Other':'📦' };
-  return map[cat] || '📦';
+  return {'Feeding':'🍼','Sleep':'🛏️','Clothing':'👕','Bath & Care':'🛁','Diapering':'🧷','Gear & Travel':'🚗','Toys & Play':'🧸','Safety':'🔒','Health':'💊','Other':'📦'}[cat] || '📦';
 }
 
-function escHtml(s) {
+function esc(s) {
   return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-// ── EXPORT CSV ────────────────────────────────────────
-function exportCSV() {
+window.exportCSV = function() {
   if (inventory.length === 0) { showToast('Nothing to export yet!'); return; }
   const headers = ['Name','Category','Condition','Notes','Barcode','Date Added'];
-  const rows = inventory.map(i => [i.name, i.category, i.condition, i.notes, i.barcode, i.addedAt].map(v => `"${(v||'').replace(/"/g,'""')}"`));
-  const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const blob = new Blob([csv], { type: 'text/csv' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
+  const rows = inventory.map(i =>
+    [i.name, i.category, i.condition, i.notes, i.barcode, i.addedAt]
+    .map(v => `"${(v||'').replace(/"/g,'""')}"`)
+  );
+  const csv  = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a    = document.createElement('a');
+  a.href     = URL.createObjectURL(blob);
   a.download = 'baby-inventory.csv';
   a.click();
   showToast('CSV downloaded!');
-}
+};
 
-// ── INIT ──────────────────────────────────────────────
 document.getElementById('barcodeInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter') lookupBarcode();
+  if (e.key === 'Enter') window.lookupBarcode();
 });
 
 renderList();
